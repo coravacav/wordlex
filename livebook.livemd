@@ -1,0 +1,181 @@
+# Distributed Wordle
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.12.3"},
+  {:httpoison, "~> 2.2"}
+])
+```
+
+## Wordle Logic
+
+```elixir
+wordle_words =
+  HTTPoison.get!(
+    ~c"https://gist.githubusercontent.com/dracos/dd0668f281e685bad51479e5acaadb93/raw/6bfa15d263d6d5b63840a8e5b64e04b382fdb079/valid-wordle-words.txt"
+  )
+
+wordle_words = wordle_words.body |> String.split("\n")
+```
+
+```elixir
+defmodule Wordle.Game do
+  defstruct word: "", guesses: []
+
+  @doc """
+  iex> game = %Wordle.Game {word: "testc"} 
+  iex> game |> Wordle.Game.calculate_guess("taco")
+  {:error, "Bad guess, needs to be 5 chars"}
+  iex> game |> Wordle.Game.calculate_guess("ttcce")
+  {:ok, [:match, :elsewhere, :elsewhere, :miss, :elsewhere]}
+  """
+  def calculate_guess(%__MODULE__{} = game, <<guess::binary-size(5)>>) do
+    {unmatched_seen_chars, results} =
+      Enum.zip(String.to_charlist(game.word), String.to_charlist(guess))
+      |> Enum.reduce({%{}, []}, fn t, {unmatched_seen_chars, results} ->
+        case t do
+          {letter, letter} ->
+            {Map.update(unmatched_seen_chars, letter, 0, &(&1 - 1)), results ++ [:match]}
+
+          {letter, guess} ->
+            {Map.update(unmatched_seen_chars, letter, 1, &(1 + &1)), results ++ [guess]}
+        end
+      end)
+
+    {_, results} =
+      Enum.reduce(results, {unmatched_seen_chars, []}, fn guess,
+                                                          {unmatched_seen_chars, results} ->
+        case {guess, unmatched_seen_chars} do
+          {:match, _} ->
+            {unmatched_seen_chars, results ++ [:match]}
+
+          {_, %{^guess => value}} when value > 0 ->
+            {
+              Map.update(unmatched_seen_chars, guess, 0, &(&1 - 1)),
+              results ++ [:elsewhere]
+            }
+
+          _ ->
+            {unmatched_seen_chars, results ++ [:miss]}
+        end
+      end)
+
+    {:ok, results}
+  end
+
+  def calculate_guess(_, _) do
+    {:error, "Bad guess, needs to be 5 chars"}
+  end
+
+  def completed?(%__MODULE__{guesses: [[:match, :match, :match, :match, :match] | _]}),
+    do: true
+
+  def completed?(_), do: false
+end
+```
+
+```elixir
+defmodule Wordle do
+  use GenServer
+
+  @impl true
+  def init(words) when is_list(words) and length(words) > 0 do
+    initial_state = %Wordle.Game{word: Enum.random(words)}
+    {:ok, initial_state}
+  end
+
+  @impl true
+  def handle_cast({:guess, guess}, game) do
+    {:noreply, game |> add_guess(guess)}
+  end
+
+  @impl true
+  def handle_call(:completed?, _from, game) do
+    {:reply, Wordle.Game.completed?(game), game}
+  end
+
+  @impl true
+  def handle_call(:get_guessed, _from, game) do
+    {:reply, game.guesses, game}
+  end
+
+  def start_game(words) when is_list(words) and length(words) > 0 do
+    {:ok, pid} = GenServer.start_link(Wordle, words)
+    pid
+  end
+
+  def guess(pid, guess) do
+    GenServer.cast(pid, {:guess, guess})
+  end
+
+  def get_guesses(pid) do
+    GenServer.call(pid, :get_guessed)
+  end
+
+  def completed?(pid) do
+    GenServer.call(pid, :completed?)
+  end
+
+  defp add_guess(%Wordle.Game{} = game, guess) do
+    case Wordle.Game.calculate_guess(game, guess) do
+      {:ok, result} -> Map.update!(game, :guesses, &[{guess, result} | &1])
+      {:error, _} -> game
+    end
+  end
+end
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+game = Wordle.start_game(["tuesd"])
+game |> Wordle.guess("tacos")
+game |> Wordle.guess("tacoss")
+IO.inspect(game |> Wordle.completed?())
+game |> Wordle.guess("tuesd")
+IO.inspect(game |> Wordle.completed?())
+game
+```
+
+## Section
+
+```elixir
+frame = Kino.Frame.new()
+form = Kino.Control.form([guess: Kino.Input.text("Wordle Guess")], submit: "Send")
+game = Wordle.start_game(wordle_words)
+
+render = fn ->
+  frame |> Kino.Frame.clear()
+  frame |> Kino.Frame.append(form)
+
+  IO.inspect(game |> Wordle.get_guesses())
+
+  game
+  |> Wordle.get_guesses()
+  |> Enum.map(fn {guess, [guess1, guess2, guess3, guess4, guess5]} ->
+    frame
+    |> Kino.Frame.append(
+      Kino.HTML.new("""
+      #{guess}
+      #{guess1}
+      #{guess2}
+      #{guess3}
+      #{guess4}
+      #{guess5}
+      """)
+    )
+  end)
+end
+
+render.()
+
+frame
+```
+
+```elixir
+Kino.listen(form, fn
+  %{data: %{guess: guess}} ->
+    game |> Wordle.guess(guess)
+    render.()
+end)
+```
