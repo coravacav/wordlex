@@ -11,8 +11,7 @@ defmodule Wordlex.Application do
       WordlexWeb.Telemetry,
       {DNSCluster, query: Application.get_env(:wordlex, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Wordlex.PubSub},
-      # Start the Finch HTTP client for sending emails
-      {Finch, name: Wordlex.Finch},
+      Wordle,
       # Start a worker by calling: Wordlex.Worker.start_link(arg)
       # {Wordlex.Worker, arg},
       # Start to serve requests, typically the last entry

@@ -47,7 +47,10 @@ defmodule Wordlex.MixProject do
       {:gettext, "~> 0.20"},
       {:jason, "~> 1.2"},
       {:dns_cluster, "~> 0.1.1"},
-      {:plug_cowboy, "~> 2.5"}
+      {:plug_cowboy, "~> 2.5"},
+      {:httpoison, "~> 2.2"},
+      {:phoenix_ecto, "~> 4.0"},
+      {:ecto, "~> 3.11"}
     ]
   end
 

@@ -1,5 +1,9 @@
 defmodule WordlexWeb.PageHTML do
   use WordlexWeb, :html
 
-  embed_templates "page_html/*"
+  def home(assigns) do
+    ~H"""
+    <div class="user">test</div>
+    """
+  end
 end
